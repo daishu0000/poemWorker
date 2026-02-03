@@ -51,6 +51,10 @@ class LLMChat:
         return d
 
     def get_selicon_completion_once(self, question: str, model: str, enable_thinking: bool = False):
+        if not (SILICONFLOW_API_KEY or "").strip():
+            raise ValueError(
+                "SILICONFLOW_API_KEY 未设置。请在运行容器时通过 --env-file 传入 .env，或设置环境变量 SILICONFLOW_API_KEY。"
+            )
         headers = {
             "Authorization": f"Bearer {SILICONFLOW_API_KEY}",
             "Content-Type": "application/json",
@@ -73,19 +77,24 @@ class LLMChat:
             return self.dict_to_obj(raw)
         except requests.exceptions.Timeout as e:
             logger.error(f"Request timeout for model {model}: {e}")
-            return None
+            raise ValueError(f"SiliconFlow 请求超时 (model={model}): {e}") from e
         except requests.exceptions.RequestException as e:
             logger.error(f"Request error for model {model}: {e}")
-            return None
+            # 便于排查：401=API Key 错误，4xx/5xx 或连接失败会带响应或原因
+            detail = str(e)
+            if hasattr(e, "response") and e.response is not None:
+                try:
+                    detail = f"status={e.response.status_code} body={e.response.text[:200]}"
+                except Exception:
+                    pass
+            raise ValueError(f"SiliconFlow 请求失败 (model={model}): {detail}") from e
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
-            return None
+            raise ValueError(f"SiliconFlow 调用异常 (model={model}): {e}") from e
 
     def get_completion_once(self, question: str, model: str, mode: str = "siliconflow", enable_thinking=False):
         if mode == "siliconflow":
             completion = self.get_selicon_completion_once(question, model, enable_thinking)
-            if completion is None:
-                raise ValueError(f"Failed to get completion from siliconflow for model {model}")
             return completion
         raise ValueError(f"Unsupported mode: {mode}")
 

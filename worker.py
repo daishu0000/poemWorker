@@ -4,6 +4,7 @@
 部署在子系统，循环执行：claim -> 拉诗 -> 提取地名 -> 写 place_names_match_results -> complete。
 """
 
+import os
 import time
 import logging
 
@@ -71,9 +72,18 @@ def process_one_task():
         # 不写库、不上报完成，任务会一直 in_progress；也可选择写入失败记录后上报 failed，此处简单处理为不完成
         return True  # 避免死循环重试同一任务
 
-    # 写入中央库 place_names_match_results
-    insert_match_results(task_id, results)
-    logger.info("任务 task_id=%s 已写入 %s 条结果", task_id, len(results))
+    # 过滤 format_error：不写入数据库，视为失败并记录日志
+    FORMAT_ERROR = '{"error":"format_error"}'
+    success_results = []
+    for poem_id, match_names in results:
+        if match_names == FORMAT_ERROR:
+            logger.warning("format_error 视为失败，不写入数据库: task_id=%s poem_id=%s", task_id, poem_id)
+        else:
+            success_results.append((poem_id, match_names))
+
+    # 写入中央库 place_names_match_results（仅成功结果）
+    insert_match_results(task_id, success_results)
+    logger.info("任务 task_id=%s 已写入 %s 条结果", task_id, len(success_results))
 
     ok2, msg2 = complete_task(task_id)
     if not ok2:
@@ -85,6 +95,11 @@ def process_one_task():
 
 def main():
     logger.info("Worker 启动，中央服务器: %s", CENTRAL_API_BASE_URL)
+    if not (os.getenv("SILICONFLOW_API_KEY") or "").strip():
+        logger.warning(
+            "SILICONFLOW_API_KEY 未设置，SiliconFlow 调用将失败。"
+            "请在运行容器时使用 --env-file .env 或 -e SILICONFLOW_API_KEY=xxx"
+        )
     ok, msg = health_check()
     if not ok:
         logger.warning("中央服务器健康检查失败: %s，将继续尝试领取任务", msg)

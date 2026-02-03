@@ -1,7 +1,6 @@
 # 不打包进镜像
 .git
 .gitignore
-.env
 .idea
 __pycache__
 *.pyc
