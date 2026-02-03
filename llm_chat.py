@@ -2,7 +2,9 @@
 """LLM 调用（复用 poem_test 逻辑，SiliconFlow 等）"""
 
 import os
+import time
 import logging
+import threading
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -13,6 +15,27 @@ load_dotenv()
 
 SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY")
 LOG_FILE = os.getenv("LOG_FILE", "ask.log")
+
+# QPS 限流（全局、线程安全）：上次请求时间与最小间隔
+_rate_limit_lock = threading.Lock()
+_rate_limit_last_time = 0.0
+
+
+def _wait_rate_limit():
+    """在发起 LLM 请求前调用，保证不超过配置的 QPS。"""
+    try:
+        from config import LLM_MAX_QPS
+    except ImportError:
+        return
+    if LLM_MAX_QPS <= 0:
+        return
+    min_interval = 1.0 / LLM_MAX_QPS
+    with _rate_limit_lock:
+        now = time.monotonic()
+        elapsed = now - _rate_limit_last_time
+        if elapsed < min_interval:
+            time.sleep(min_interval - elapsed)
+        _rate_limit_last_time = time.monotonic()
 
 logger = logging.getLogger("LLMChatLogger")
 logger.setLevel(logging.INFO)
@@ -29,10 +52,11 @@ class LLMChat:
     def _get_session(cls):
         if cls._session is None:
             cls._session = requests.Session()
+            # 429 由下方 get_selicon_completion_once 内单独退避，此处只重试 5xx
             retry_strategy = Retry(
                 total=3,
                 backoff_factor=1,
-                status_forcelist=[429, 500, 502, 503, 504],
+                status_forcelist=[500, 502, 503, 504],
                 allowed_methods=["POST"],
             )
             adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=20, pool_maxsize=20)
@@ -66,15 +90,41 @@ class LLMChat:
         }
         session = self._get_session()
         try:
-            resp = session.post(
-                "https://api.siliconflow.cn/v1/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=(10, 120),
-            )
-            resp.raise_for_status()
-            raw = resp.json()
-            return self.dict_to_obj(raw)
+            backoff_sec = 60
+            max_429_retries = 5
+            try:
+                from config import LLM_429_BACKOFF_SECONDS, LLM_429_MAX_RETRIES
+                backoff_sec = LLM_429_BACKOFF_SECONDS
+                max_429_retries = LLM_429_MAX_RETRIES
+            except ImportError:
+                pass
+            for attempt in range(max_429_retries + 1):
+                _wait_rate_limit()
+                resp = session.post(
+                    "https://api.siliconflow.cn/v1/chat/completions",
+                    headers=headers,
+                    json=data,
+                    timeout=(10, 120),
+                )
+                if resp.status_code == 429:
+                    wait_sec = backoff_sec
+                    retry_after = resp.headers.get("Retry-After")
+                    if retry_after is not None:
+                        try:
+                            wait_sec = max(wait_sec, int(retry_after))
+                        except ValueError:
+                            pass
+                    if attempt < max_429_retries:
+                        logger.warning(
+                            "SiliconFlow 429 限流，等待 %s 秒后重试 (第 %s/%s 次)",
+                            wait_sec, attempt + 1, max_429_retries,
+                        )
+                        time.sleep(wait_sec)
+                        continue
+                    resp.raise_for_status()
+                resp.raise_for_status()
+                raw = resp.json()
+                return self.dict_to_obj(raw)
         except requests.exceptions.Timeout as e:
             logger.error(f"Request timeout for model {model}: {e}")
             raise ValueError(f"SiliconFlow 请求超时 (model={model}): {e}") from e

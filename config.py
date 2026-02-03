@@ -35,5 +35,12 @@ MAX_CHARS_PER_BATCH = int(os.getenv("MAX_CHARS_PER_BATCH", "1000"))
 MAX_ITEMS_PER_BATCH = int(os.getenv("MAX_ITEMS_PER_BATCH", "20"))
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
 
+# LLM 请求 QPS 控制（避免 429）：每秒最多请求数，≤0 表示不限制
+LLM_MAX_QPS = float(os.getenv("LLM_MAX_QPS", "2.0"))
+# 收到 429 时的基础退避秒数（实际会取 Retry-After 与本值较大者，并随重试递增）
+LLM_429_BACKOFF_SECONDS = int(os.getenv("LLM_429_BACKOFF_SECONDS", "60"))
+# 429 最大重试次数（单次请求内）
+LLM_429_MAX_RETRIES = int(os.getenv("LLM_429_MAX_RETRIES", "5"))
+
 # 无任务时轮询间隔（秒）
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "30"))
