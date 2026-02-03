@@ -26,6 +26,9 @@ MYSQL_CONFIG = {
 # 诗歌表名（中央库中的诗歌表）
 POEM_TABLE = os.getenv("POEM_TABLE", "quiz_poem_2")
 
+# LLM 平台：siliconflow（默认）/ aliyun / openrouter，对应 .env 中的 LLM_PLATFORM
+LLM_PLATFORM = os.getenv("LLM_PLATFORM", "siliconflow")
+
 # 地名提取参数（与 poem_test 一致）
 DEFAULT_MODEL = os.getenv("PLACE_EXTRACT_MODEL", "deepseek-ai/DeepSeek-V3.2")
 PROMPT_ID = int(os.getenv("PLACE_PROMPT_ID", "3"))  # 3=批量 JSON 模式

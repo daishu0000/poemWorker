@@ -10,6 +10,7 @@ import logging
 
 from config import (
     CENTRAL_API_BASE_URL,
+    LLM_PLATFORM,
     DEFAULT_MODEL,
     PROMPT_ID,
     MAX_WORKERS,
@@ -94,12 +95,17 @@ def process_one_task():
 
 
 def main():
-    logger.info("Worker 启动，中央服务器: %s", CENTRAL_API_BASE_URL)
-    if not (os.getenv("SILICONFLOW_API_KEY") or "").strip():
+    logger.info("Worker 启动，中央服务器: %s，LLM 平台: %s", CENTRAL_API_BASE_URL, LLM_PLATFORM)
+    platform = (LLM_PLATFORM or "siliconflow").lower().strip()
+    if platform == "siliconflow" and not (os.getenv("SILICONFLOW_API_KEY") or "").strip():
         logger.warning(
             "SILICONFLOW_API_KEY 未设置，SiliconFlow 调用将失败。"
-            "请在运行容器时使用 --env-file .env 或 -e SILICONFLOW_API_KEY=xxx"
+            "请在 .env 中设置 SILICONFLOW_API_KEY 或改用 LLM_PLATFORM=aliyun/openrouter"
         )
+    elif platform == "aliyun" and not (os.getenv("DASHSCOPE_API_KEY") or "").strip():
+        logger.warning("LLM_PLATFORM=aliyun 但 DASHSCOPE_API_KEY 未设置，请在 .env 中配置。")
+    elif platform == "openrouter" and not (os.getenv("OPENROUTER_API_KEY") or os.getenv("OPEN_ROUTER_KEY") or "").strip():
+        logger.warning("LLM_PLATFORM=openrouter 但 OPENROUTER_API_KEY 未设置，请在 .env 中配置。")
     ok, msg = health_check()
     if not ok:
         logger.warning("中央服务器健康检查失败: %s，将继续尝试领取任务", msg)

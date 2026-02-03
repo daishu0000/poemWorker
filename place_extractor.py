@@ -14,8 +14,11 @@ PROGRESS_INTERVAL = 10
 
 from llm_chat import LLMChat
 
-
-MODE = "siliconflow"
+try:
+    from config import LLM_PLATFORM
+    MODE = LLM_PLATFORM
+except ImportError:
+    MODE = "siliconflow"
 ENABLE_THINKING = False
 
 

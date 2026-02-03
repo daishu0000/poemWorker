@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""LLM 调用（复用 poem_test 逻辑，SiliconFlow 等）"""
+"""LLM 调用：支持 SiliconFlow、阿里云百炼、OpenRouter（OpenAI 兼容接口）"""
 
 import os
 import time
@@ -10,11 +10,18 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from types import SimpleNamespace
 from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
 SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY")
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPEN_ROUTER_KEY")
 LOG_FILE = os.getenv("LOG_FILE", "ask.log")
+
+# OpenAI 兼容接口的 base_url
+ALIYUN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # QPS 限流（全局、线程安全）：上次请求时间与最小间隔
 _rate_limit_lock = threading.Lock()
@@ -143,13 +150,42 @@ class LLMChat:
             logger.error(f"Unexpected error: {e}")
             raise ValueError(f"SiliconFlow 调用异常 (model={model}): {e}") from e
 
-    def get_completion_once(self, question: str, model: str, mode: str = "siliconflow", enable_thinking=False):
+    def _get_openai_completion_once(self, question: str, model: str, base_url: str, api_key: str):
+        """通过 OpenAI 兼容接口请求（阿里云、OpenRouter 等）。"""
+        if not (api_key or "").strip():
+            raise ValueError("未设置对应平台的 API Key，请在 .env 中配置。")
+        client = OpenAI(api_key=api_key.strip(), base_url=base_url, timeout=120.0)
+        _wait_rate_limit()
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[self.system_message, {"role": "user", "content": question}],
+        )
+        return self.dict_to_obj(resp.model_dump())
+
+    def get_completion_once(self, question: str, model: str, mode: str = None, enable_thinking=False):
+        if mode is None:
+            try:
+                from config import LLM_PLATFORM
+                mode = LLM_PLATFORM
+            except ImportError:
+                mode = "siliconflow"
+        mode = (mode or "siliconflow").lower().strip()
         if mode == "siliconflow":
             completion = self.get_selicon_completion_once(question, model, enable_thinking)
             return completion
-        raise ValueError(f"Unsupported mode: {mode}")
+        if mode == "aliyun":
+            completion = self._get_openai_completion_once(
+                question, model, ALIYUN_BASE_URL, DASHSCOPE_API_KEY or ""
+            )
+            return completion
+        if mode == "openrouter":
+            completion = self._get_openai_completion_once(
+                question, model, OPENROUTER_BASE_URL, OPENROUTER_API_KEY or ""
+            )
+            return completion
+        raise ValueError(f"Unsupported mode: {mode}，支持: siliconflow / aliyun / openrouter")
 
-    def ask_once_with_usage(self, question: str, model: str, mode: str = "siliconflow", enable_thinking: bool = False):
+    def ask_once_with_usage(self, question: str, model: str, mode: str = None, enable_thinking: bool = False):
         try:
             completion = self.get_completion_once(question, model, mode, enable_thinking)
             if not hasattr(completion, "choices") or not completion.choices:
