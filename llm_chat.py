@@ -23,6 +23,7 @@ _rate_limit_last_time = 0.0
 
 def _wait_rate_limit():
     """在发起 LLM 请求前调用，保证不超过配置的 QPS。"""
+    global _rate_limit_last_time
     try:
         from config import LLM_MAX_QPS
     except ImportError:
