@@ -31,10 +31,10 @@ jobs:
         env:
           ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
         run: |
-          docker build --progress=plain -t $ALIYUN_REGISTRY/poem-worker:latest .
+          docker build --progress=plain -t $ALIYUN_REGISTRY/daishu9999/poem-worker:latest .
 
       - name: Push Docker Image to Aliyun
         env:
           ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
         run: |
-          docker push $ALIYUN_REGISTRY/poem-worker:latest
+          docker push $ALIYUN_REGISTRY/daishu9999/poem-worker:latest
