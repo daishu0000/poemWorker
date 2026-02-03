@@ -2,8 +2,15 @@
 """地名提取逻辑（复用 poem_test get_place_name）：批量 LLM 分析诗歌，返回 (id, match_names)"""
 
 import json
+import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterable, List, Tuple
+
+logger = logging.getLogger(__name__)
+
+# 进度输出间隔（秒）
+PROGRESS_INTERVAL = 10
 
 from llm_chat import LLMChat
 
@@ -236,15 +243,30 @@ def analyze_poems_batch_request(
     return result, usage_info
 
 
+def _progress_reporter(
+    total: int,
+    id_to_result: Dict[int, str],
+    stop_event: threading.Event,
+    interval: int = PROGRESS_INTERVAL,
+) -> None:
+    """后台线程：每 interval 秒输出一次地名提取进度，直到 stop_event 被设置。"""
+    while True:
+        if stop_event.wait(interval):
+            break
+        done = len(id_to_result)
+        pct = (100 * done // total) if total else 0
+        logger.info("地名提取进度: 已处理 %s / 共 %s 条 (%s%%)", done, total, pct)
+
+
 def analyze_poems_batches_concurrent(
     poems: List[Tuple[Any, ...]],
     prompt: str,
     prompt_id: int,
     model: str,
-    max_workers: int = 4,
+    max_workers: int = 8,
     task_timeout: int | None = None,
-    max_chars_per_batch: int = 6000,
-    max_items_per_batch: int = 12,
+    max_chars_per_batch: int = 1000,
+    max_items_per_batch: int = 20,
     max_retries: int = 2,
 ) -> List[Tuple[int, str]]:
     """
@@ -254,6 +276,15 @@ def analyze_poems_batches_concurrent(
     id_to_result: Dict[int, str] = {}
     batch_to_ids = {tuple(b): [int(p[0]) for p in b] for b in batches}
     failed_batches = list(batches)
+
+    stop_event = threading.Event()
+    progress_thread = threading.Thread(
+        target=_progress_reporter,
+        args=(len(poems), id_to_result, stop_event),
+        kwargs={"interval": PROGRESS_INTERVAL},
+        daemon=True,
+    )
+    progress_thread.start()
 
     for retry_count in range(max_retries + 1):
         if not failed_batches:
@@ -284,6 +315,11 @@ def analyze_poems_batches_concurrent(
                     id_to_result[pid] = compact
         failed_batches = current_failed
 
+    stop_event.set()
+    done = len(id_to_result)
+    total = len(poems)
+    pct = (100 * done // total) if total else 0
+    logger.info("地名提取进度: 已完成 %s / 共 %s 条 (%s%%)", done, total, pct)
     return [(int(p[0]), id_to_result.get(int(p[0]), '{"error":"format_error"}')) for p in poems]
 
 
@@ -293,7 +329,7 @@ def run_extraction(
     prompt_id: int = 3,
     max_workers: int = 8,
     task_timeout: int | None = 120,
-    max_chars_per_batch: int = 6000,
+    max_chars_per_batch: int = 1000,
     max_items_per_batch: int = 12,
     max_retries: int = 2,
 ) -> List[Tuple[int, str]]:

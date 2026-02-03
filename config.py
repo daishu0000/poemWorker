@@ -10,6 +10,7 @@ load_dotenv()
 CENTRAL_API_BASE_URL = os.getenv("CENTRAL_API_BASE_URL", "http://121.40.230.141:5001")
 
 # 中央 MySQL（与 task_manager 同一库：读诗歌、写 place_names_match_results）
+# connect_timeout/read_timeout 避免网络不可达时无限挂起
 MYSQL_CONFIG = {
     "host": os.getenv("MYSQL_HOST", "121.40.230.141"),
     "port": int(os.getenv("MYSQL_PORT", "3306")),
@@ -17,6 +18,9 @@ MYSQL_CONFIG = {
     "password": os.getenv("MYSQL_PASSWORD", "TB!#8p+_Cp"),
     "database": os.getenv("MYSQL_DATABASE", "poem"),
     "charset": "utf8mb4",
+    "connect_timeout": int(os.getenv("MYSQL_CONNECT_TIMEOUT", "30")),
+    "read_timeout": int(os.getenv("MYSQL_READ_TIMEOUT", "60")),
+    "write_timeout": int(os.getenv("MYSQL_WRITE_TIMEOUT", "60")),
 }
 
 # 诗歌表名（中央库中的诗歌表）
@@ -27,8 +31,8 @@ DEFAULT_MODEL = os.getenv("PLACE_EXTRACT_MODEL", "deepseek-ai/DeepSeek-V3.2")
 PROMPT_ID = int(os.getenv("PLACE_PROMPT_ID", "3"))  # 3=批量 JSON 模式
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "8"))
 TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT", "120"))
-MAX_CHARS_PER_BATCH = int(os.getenv("MAX_CHARS_PER_BATCH", "6000"))
-MAX_ITEMS_PER_BATCH = int(os.getenv("MAX_ITEMS_PER_BATCH", "12"))
+MAX_CHARS_PER_BATCH = int(os.getenv("MAX_CHARS_PER_BATCH", "1000"))
+MAX_ITEMS_PER_BATCH = int(os.getenv("MAX_ITEMS_PER_BATCH", "20"))
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
 
 # 无任务时轮询间隔（秒）

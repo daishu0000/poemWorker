@@ -42,7 +42,9 @@ def process_one_task():
 
     logger.info("领取任务 task_id=%s, poem_ids 数量=%s", task_id, len(poem_ids))
 
+    logger.info("正在从中央库拉取 %s 条诗歌...", len(poem_ids))
     poems = get_poems_by_ids(poem_ids)
+    logger.info("已拉取 %s 条诗歌，开始地名提取", len(poems))
     if len(poems) != len(poem_ids):
         missing = set(poem_ids) - {p[0] for p in poems}
         logger.warning("中央库中部分诗歌缺失: 请求 %s 条，得到 %s 条，缺失 id: %s", len(poem_ids), len(poems), missing)

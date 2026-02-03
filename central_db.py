@@ -45,7 +45,7 @@ def get_poems_by_ids(poem_ids):
 def insert_match_results(task_id: int, results: list):
     """
     将地名提取结果写入中央库 place_names_match_results。
-    results: [(quiz_poem2_id: int, match_names: str), ...]
+    results: [(quiz_poem_2_id: int, match_names: str), ...]
     """
     if not results:
         return
@@ -54,7 +54,7 @@ def insert_match_results(task_id: int, results: list):
         with conn.cursor() as cur:
             for poem_id, match_names in results:
                 cur.execute(
-                    "INSERT INTO place_names_match_results (quiz_poem2_id, match_names, task_id) VALUES (%s, %s, %s)",
+                    "INSERT INTO place_names_match_results (quiz_poem_2_id, match_names, task_id) VALUES (%s, %s, %s)",
                     (poem_id, match_names, task_id),
                 )
         conn.commit()
