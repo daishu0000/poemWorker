@@ -36,6 +36,5 @@ jobs:
       - name: Push Docker Image to Aliyun
         env:
           ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
-          IMAGE_NAME: ${{ secrets.ALIYUN_IMAGE_NAME }}
         run: |
-          docker push $ALIYUN_REGISTRY/$IMAGE_NAME:latest
+          docker push $ALIYUN_REGISTRY/poem-worker:latest
