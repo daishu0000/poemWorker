@@ -1,0 +1,41 @@
+# 推送时构建 Docker 镜像并推送到阿里云容器镜像服务（不部署，供各子系统自行拉取）
+# 需在仓库 Settings -> Secrets and variables -> Actions 中配置：
+#   ALIYUN_USERNAME     - 阿里云容器镜像服务用户名
+#   ALIYUN_PASSWORD     - 阿里云容器镜像服务密码
+#   ALIYUN_REGISTRY     - 镜像仓库地址，如 crpi-xxx.cn-hangzhou.personal.cr.aliyuncs.com
+name: Build and Push to Aliyun ACR
+
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Aliyun Container Registry
+        env:
+          ALIYUN_USERNAME: ${{ secrets.ALIYUN_USERNAME }}
+          ALIYUN_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
+        run: |
+          echo "$ALIYUN_PASSWORD" | docker login --username=$ALIYUN_USERNAME ${{ secrets.ALIYUN_REGISTRY }} --password-stdin
+
+      - name: Build Docker Image
+        env:
+          ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+        run: |
+          docker build --progress=plain -t $ALIYUN_REGISTRY/poem-worker:latest .
+
+      - name: Push Docker Image to Aliyun
+        env:
+          ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+          IMAGE_NAME: ${{ secrets.ALIYUN_IMAGE_NAME }}
+        run: |
+          docker push $ALIYUN_REGISTRY/$IMAGE_NAME:latest
