@@ -52,6 +52,10 @@ formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s", datef
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
+# 关闭 httpx/httpcore 的每条请求 INFO 日志（openai 调阿里云等时使用），只保留 WARNING 及以上
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 
 class LLMChat:
     _session = None
@@ -159,6 +163,7 @@ class LLMChat:
         resp = client.chat.completions.create(
             model=model,
             messages=[self.system_message, {"role": "user", "content": question}],
+            extra_body={"enable_thinking": False},
         )
         return self.dict_to_obj(resp.model_dump())
 
